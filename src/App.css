@@ -1,0 +1,63 @@
+html, body, #root, .app { height: 100%;
+margin: 0;
+padding: 0;
+}
+.sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 100%;
+  background: white;
+  padding: 16px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.map {
+  position: absolute;
+  top: 0;
+  left: 240px;
+  right: 0;
+  bottom: 0;
+}
+
+.filter-row {
+  display: block;
+  font-size: 0.9em;
+  margin-bottom: 6px;
+}
+
+.count {
+  margin-top: 16px;
+  font-size: 0.85em;
+  color: #666;
+}
+.detail-panel {
+position: absolute;
+bottom: 20px;
+left: 20px;
+max-width: 360px;
+background: white;
+padding: 16px 20px;
+border-radius: 10px;
+box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); z-index: 10;
+}
+.meta {
+color: #666; font-size: 0.9em;
+}
+.keywords {
+color: #888; font-size: 0.85em; font-style: italic;
+}
+
+.story-marker {
+width: 12px;
+height: 12px;
+border-radius: 50%;
+background: #d64545;
+border: 2px solid white;
+cursor: pointer;
+box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+}
+
