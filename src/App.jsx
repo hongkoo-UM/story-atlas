@@ -66,11 +66,11 @@ function formatYear(year) {
   return year < 0 ? `${Math.abs(year)} BCE` : `${year}`;
 }
 
-function TimelineView({ stories, onSelect, onHover, onHoverEnd }) {
+function TimelineView({ stories, onSelect, onHover, onHoverEnd, selectedTitle, onDeselect }) {
   const span = TIMELINE_AXIS_MAX - MIN_YEAR_BOUND || 1;
 
   return (
-    <div className="timeline">
+    <div className="timeline" onClick={onDeselect}>
       <div className="timeline-track">
         {stories.map((story) => {
           const leftPct = ((story.year - MIN_YEAR_BOUND) / span) * 100;
@@ -78,9 +78,12 @@ function TimelineView({ stories, onSelect, onHover, onHoverEnd }) {
           return (
             <div
               key={story.title}
-              className="timeline-point"
+              className={`timeline-point${story.title === selectedTitle ? " focused" : ""}`}
               style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-              onClick={() => onSelect(story)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(story);
+              }}
               onMouseEnter={(e) => onHover(story, e)}
               onMouseMove={(e) => onHover(story, e)}
               onMouseLeave={onHoverEnd}
@@ -125,10 +128,66 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [hoverStory, setHoverStory] = useState(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  // The detail panel fades in/out instead of popping, which means it can't
+  // just be mounted/unmounted in lockstep with selectedStory - it needs to
+  // stay mounted (showing the old content) for the duration of the
+  // fade-out, and mount hidden-then-visible (rather than already-visible)
+  // for the fade-in to actually animate instead of snapping in.
+  const [panelStory, setPanelStory] = useState(null);
+  const [panelVisible, setPanelVisible] = useState(false);
+  const panelCloseTimeoutRef = useRef(null);
+  // Representative images, looked up on demand from Wikipedia's free API by
+  // story title and cached by title so the same story is never fetched
+  // twice. Values: "loading" while in flight, null once confirmed there's
+  // no matching page/thumbnail, or the image URL once found. Coverage is
+  // necessarily uneven - well-known novels/films/games tend to have a
+  // Wikipedia thumbnail, but oral folklore and anonymous myths often won't.
+  const [imageCache, setImageCache] = useState({});
+
+  function fetchWikipediaSummary(pageTitle) {
+    const encoded = encodeURIComponent(pageTitle.replace(/ /g, "_"));
+    return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`).then((res) =>
+      res.ok ? res.json() : null
+    );
+  }
+
+  function ensureStoryImage(title) {
+    if (imageCache[title] !== undefined) return;
+    setImageCache((prev) => ({ ...prev, [title]: "loading" }));
+
+    fetchWikipediaSummary(title)
+      .then((data) => {
+        if (data?.thumbnail?.source) return data.thumbnail.source;
+        // The exact title didn't turn up a usable image - either there's no
+        // page by that exact name, it landed on a disambiguation page, or
+        // the page has no lead image. Fall back to Wikipedia's own search
+        // to find the closest matching article and try that instead, which
+        // catches most cases where our title differs slightly from the
+        // real article title (e.g. retellings, alternate spellings).
+        return fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=1&srsearch=${encodeURIComponent(
+            title
+          )}`
+        )
+          .then((res) => (res.ok ? res.json() : null))
+          .then((searchData) => {
+            const hit = searchData?.query?.search?.[0]?.title;
+            if (!hit || hit === title) return null;
+            return fetchWikipediaSummary(hit).then((data2) => data2?.thumbnail?.source || null);
+          });
+      })
+      .then((url) => {
+        setImageCache((prev) => ({ ...prev, [title]: url || null }));
+      })
+      .catch(() => {
+        setImageCache((prev) => ({ ...prev, [title]: null }));
+      });
+  }
 
   function handleHover(story, e) {
     setHoverStory(story);
     setHoverPos({ x: e.clientX, y: e.clientY });
+    ensureStoryImage(story.title);
   }
 
   // The filtered list recalculates whenever a filter changes
@@ -145,23 +204,58 @@ function App() {
 
   // Search results are computed against the full dataset (not the active filters),
   // so you can always find a story by name regardless of what's currently checked.
+  // Matches on title or author, so "Homer" finds the Odyssey even if you don't
+  // remember the title.
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return [];
     return storiesData
-      .filter((s) => s.title.toLowerCase().includes(query))
+      .filter(
+        (s) =>
+          s.title.toLowerCase().includes(query) ||
+          (s.author && s.author.toLowerCase().includes(query))
+      )
       .slice(0, 8);
   }, [searchQuery]);
 
   // Other known variants/adaptations of the same underlying narrative as the
-  // currently selected story (e.g. the regional Ramayana retellings).
+  // story currently shown in the panel (e.g. the regional Ramayana
+  // retellings). Based on panelStory rather than selectedStory so this list
+  // doesn't blank out mid fade-out.
   const relatedVariants = useMemo(() => {
-    if (!selectedStory || !selectedStory.narrativeFamily) return [];
+    if (!panelStory || !panelStory.narrativeFamily) return [];
     return storiesData.filter(
       (s) =>
-        s.narrativeFamily === selectedStory.narrativeFamily &&
-        s.title !== selectedStory.title
+        s.narrativeFamily === panelStory.narrativeFamily && s.title !== panelStory.title
     );
+  }, [panelStory]);
+
+  // Drive the detail panel's fade in/out. Opening from closed: mount with
+  // the content but stay hidden for a frame, then flip visible so the
+  // opacity/transform transition actually has something to animate from.
+  // Switching directly between two different stories while already open
+  // gets the same treatment - drop back to hidden, swap the content, then
+  // fade the new story back in - rather than snapping straight to the new
+  // content. Closing: fade out, then unmount after the transition finishes
+  // so the old content doesn't flash away instantly.
+  useEffect(() => {
+    if (selectedStory) {
+      if (panelCloseTimeoutRef.current) {
+        clearTimeout(panelCloseTimeoutRef.current);
+        panelCloseTimeoutRef.current = null;
+      }
+      setPanelStory(selectedStory);
+      ensureStoryImage(selectedStory.title);
+      setPanelVisible(false);
+      // A short timeout (rather than requestAnimationFrame) to let the
+      // "hidden" state actually commit before flipping back to visible -
+      // rAF can simply never fire while a tab isn't the active/focused one,
+      // which would leave the panel stuck invisible indefinitely.
+      setTimeout(() => setPanelVisible(true), 20);
+    } else {
+      setPanelVisible(false);
+      panelCloseTimeoutRef.current = setTimeout(() => setPanelStory(null), 260);
+    }
   }, [selectedStory]);
 
   // Jump to a specific story from anywhere in the UI (search, related-variant
@@ -276,6 +370,13 @@ function App() {
     // above prevents double-running if both end up firing.
     mapRef.current.on("load", runStyleSetup);
     mapRef.current.on("style.load", runStyleSetup);
+
+    // Clicking empty map background (not a marker) closes the open detail
+    // panel with the same fade-out used elsewhere. Marker elements sit
+    // outside the canvas MapLibre listens on, so marker clicks don't reach
+    // this handler - but el.addEventListener below also stops propagation
+    // as a defensive measure in case that ever changes.
+    mapRef.current.on("click", () => setSelectedStory(null));
   }, []);
 
   // Resize the map after switching back from the timeline, since a canvas
@@ -302,7 +403,10 @@ function App() {
         .setLngLat([story.lon, story.lat])
         .addTo(mapRef.current);
 
-      el.addEventListener("click", () => setSelectedStory(story));
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setSelectedStory(story);
+      });
       el.addEventListener("mouseenter", (e) => handleHover(story, e));
       el.addEventListener("mousemove", (e) => handleHover(story, e));
       el.addEventListener("mouseleave", () => setHoverStory(null));
@@ -365,10 +469,29 @@ function App() {
     );
   }
 
+  // Reset everything back to the default, fully-open filter state.
+  function resetFilters() {
+    setActiveGenres(ALL_GENRES);
+    setActiveMedia(ALL_MEDIA);
+    setMinYear(MIN_YEAR_BOUND);
+    setMaxYear(MAX_YEAR_BOUND);
+  }
+
   return (
     <div className="app">
       <div className="sidebar">
-        <h3>Genre</h3>
+        <button className="reset-filters-btn" onClick={resetFilters}>
+          Reset all filters
+        </button>
+
+        <div className="filter-section-header">
+          <h3>Genre</h3>
+          <span className="filter-quick-actions">
+            <button onClick={() => setActiveGenres(ALL_GENRES)}>All</button>
+            <span className="filter-quick-sep">/</span>
+            <button onClick={() => setActiveGenres([])}>None</button>
+          </span>
+        </div>
         {ALL_GENRES.map((g) => (
           <label key={g} className="filter-row">
             <input
@@ -380,7 +503,14 @@ function App() {
           </label>
         ))}
 
-        <h3>Medium</h3>
+        <div className="filter-section-header">
+          <h3>Medium</h3>
+          <span className="filter-quick-actions">
+            <button onClick={() => setActiveMedia(ALL_MEDIA)}>All</button>
+            <span className="filter-quick-sep">/</span>
+            <button onClick={() => setActiveMedia([])}>None</button>
+          </span>
+        </div>
         {ALL_MEDIA.map((m) => (
           <label key={m} className="filter-row">
             <input
@@ -418,6 +548,8 @@ function App() {
           onSelect={setSelectedStory}
           onHover={handleHover}
           onHoverEnd={() => setHoverStory(null)}
+          selectedTitle={selectedStory?.title}
+          onDeselect={() => setSelectedStory(null)}
         />
       )}
 
@@ -439,7 +571,7 @@ function App() {
       <div className="search-bar">
         <input
           type="text"
-          placeholder="Search for a story..."
+          placeholder="Search by title or author..."
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
@@ -456,27 +588,35 @@ function App() {
             {searchResults.map((story) => (
               <li key={story.title} onClick={() => jumpToStory(story)}>
                 {story.title}
+                {story.author && <span className="search-result-author"> — {story.author}</span>}
               </li>
             ))}
           </ul>
         )}
       </div>
 
-      {selectedStory && (
-        <div className="detail-panel">
-          <h2>{selectedStory.title}</h2>
+      {panelStory && (
+        <div className={`detail-panel${panelVisible ? " visible" : ""}`}>
+          {imageCache[panelStory.title] && imageCache[panelStory.title] !== "loading" && (
+            <img
+              className="detail-image"
+              src={imageCache[panelStory.title]}
+              alt={panelStory.title}
+            />
+          )}
+          <h2>{panelStory.title}</h2>
           <p className="meta">
-            {selectedStory.country} &middot; {selectedStory.medium} &middot;{" "}
-            {selectedStory.genre} &middot; {selectedStory.era_label}
+            {panelStory.country} &middot; {panelStory.medium} &middot;{" "}
+            {panelStory.genre} &middot; {panelStory.era_label}
           </p>
-          <p className="author">By {selectedStory.author}</p>
-          <p className="description">{selectedStory.description}</p>
-          <p className="keywords">Keywords: {selectedStory.keywords}</p>
+          <p className="author">By {panelStory.author}</p>
+          <p className="description">{panelStory.description}</p>
+          <p className="keywords">Keywords: {panelStory.keywords}</p>
 
           {relatedVariants.length > 0 && (
             <div className="related-variants">
               <p className="related-heading">
-                Related narrative variants ({selectedStory.narrativeFamily}):
+                Related narrative variants ({panelStory.narrativeFamily}):
               </p>
               <ul>
                 {relatedVariants.map((r) => (
@@ -490,7 +630,7 @@ function App() {
 
           <div className="detail-actions">
             {viewMode === "timeline" && (
-              <button className="find-on-map" onClick={() => jumpToStory(selectedStory)}>
+              <button className="find-on-map" onClick={() => jumpToStory(panelStory)}>
                 Find on map
               </button>
             )}
@@ -507,8 +647,12 @@ function App() {
         const margin = 16;
         const flip = hoverPos.x + margin + tooltipWidth > window.innerWidth;
         const left = flip ? hoverPos.x - margin - tooltipWidth : hoverPos.x + margin;
+        const hoverImg = imageCache[hoverStory.title];
         return (
           <div className="hover-tooltip" style={{ left, top: hoverPos.y + 16 }}>
+            {hoverImg && hoverImg !== "loading" && (
+              <img className="hover-image" src={hoverImg} alt="" />
+            )}
             <div className="hover-title">{hoverStory.title}</div>
             <div className="hover-meta">
               {hoverStory.country} &middot; {hoverStory.medium} &middot; {hoverStory.era_label}

@@ -1,3 +1,6 @@
+.app, .app *, .app *::before, .app *::after {
+  box-sizing: border-box;
+}
 html, body, #root, .app { height: 100%;
 margin: 0;
 padding: 0;
@@ -17,12 +20,65 @@ padding: 0;
 
 .sidebar h3 {
   color: #f5f5f5;
-  font-size: 1em;
+  font-size: 0.85em;
   margin: 16px 0 8px;
 }
 
 .sidebar h3:first-child {
   margin-top: 0;
+}
+
+.reset-filters-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #565962;
+  background: #3a3d45;
+  color: #e2e2e5;
+  font-size: 0.78em;
+  cursor: pointer;
+}
+
+.reset-filters-btn:hover {
+  background: #45484f;
+}
+
+.filter-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.filter-section-header h3 {
+  margin: 16px 0 8px;
+}
+
+.filter-section-header:first-of-type h3 {
+  margin-top: 0;
+}
+
+.filter-quick-actions {
+  font-size: 0.72em;
+}
+
+.filter-quick-actions button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #8fb3e8;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+.filter-quick-actions button:hover {
+  text-decoration: underline;
+}
+
+.filter-quick-sep {
+  color: #6a6d75;
+  margin: 0 3px;
 }
 
 .map {
@@ -35,18 +91,24 @@ padding: 0;
 
 .filter-row {
   display: block;
-  font-size: 0.9em;
+  font-size: 0.78em;
   margin-bottom: 6px;
   color: #e2e2e5;
 }
 
 .year-separator {
   color: #cfcfd4;
+  font-size: 0.78em;
+}
+
+.sidebar input[type="number"] {
+  font-size: 0.78em;
+  width: 70px;
 }
 
 .count {
   margin-top: 16px;
-  font-size: 0.85em;
+  font-size: 0.72em;
   color: #a6a6ad;
 }
 .detail-panel {
@@ -59,6 +121,25 @@ padding: 16px 20px;
 border-radius: 10px;
 box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); z-index: 10;
 color: #222;
+opacity: 0;
+transform: translateY(8px);
+pointer-events: none;
+transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.detail-image {
+  display: block;
+  width: calc(100% + 40px);
+  height: 160px;
+  object-fit: contain;
+  background: #ece6d8;
+  margin: -16px -20px 12px;
+  border-radius: 10px 10px 0 0;
+}
+.detail-panel.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 .detail-panel h2 {
   color: #000;
@@ -138,6 +219,12 @@ color: #888; font-size: 0.85em; font-style: italic;
   color: #222;
 }
 
+.search-result-author {
+  color: #888;
+  font-size: 0.9em;
+  font-style: italic;
+}
+
 .search-results li:hover {
   background: #f2f2f2;
 }
@@ -154,7 +241,7 @@ color: #888; font-size: 0.85em; font-style: italic;
 width: 12px;
 height: 12px;
 border-radius: 50%;
-background: #d64545;
+background: #d9724f;
 border: 2px solid white;
 cursor: pointer;
 box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
@@ -229,7 +316,7 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   left: 264px;
   right: 24px;
   bottom: 24px;
-  background: #d9d5cc;
+  background: #6f6a5c;
   overflow: hidden;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -246,7 +333,7 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #d64545;
+  background: #d9724f;
   border: 2px solid white;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   cursor: pointer;
@@ -257,19 +344,35 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   background: #2a6fdb;
 }
 
+/* Same pulsing ring treatment as the map markers, for whichever timeline
+   point is currently selected. */
+.timeline-point.focused::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  border: 2px solid #2a6fdb;
+  animation: marker-pulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+
 .timeline-axis {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   height: 48px;
-  border-top: 1px solid #a8a29a;
+  border-top: 1px solid #b8b3a4;
 }
 
 .timeline-tick {
   position: absolute;
   top: 0;
-  border-left: 1px solid #a8a29a;
+  border-left: 1px solid #b8b3a4;
   height: 10px;
   transform: translateX(-50%);
 }
@@ -280,7 +383,7 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   left: 0;
   transform: translateX(-50%);
   font-size: 0.75em;
-  color: #3a3733;
+  color: #f5f2ea;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -329,6 +432,16 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   pointer-events: none;
+}
+
+.hover-image {
+  display: block;
+  width: calc(100% + 24px);
+  height: 100px;
+  object-fit: contain;
+  background: #ece6d8;
+  margin: -8px -12px 6px;
+  border-radius: 8px 8px 0 0;
 }
 
 .hover-title {
