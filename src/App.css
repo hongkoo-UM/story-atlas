@@ -316,7 +316,7 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   left: 264px;
   right: 24px;
   bottom: 24px;
-  background: #6f6a5c;
+  background: #d8c3a0;
   overflow: hidden;
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -333,7 +333,7 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #d9724f;
+  background: #1b2a4a;
   border: 2px solid white;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   cursor: pointer;
@@ -366,13 +366,13 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   left: 0;
   right: 0;
   height: 48px;
-  border-top: 1px solid #b8b3a4;
+  border-top: 1px solid #a68a63;
 }
 
 .timeline-tick {
   position: absolute;
   top: 0;
-  border-left: 1px solid #b8b3a4;
+  border-left: 1px solid #a68a63;
   height: 10px;
   transform: translateX(-50%);
 }
@@ -383,7 +383,7 @@ box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   left: 0;
   transform: translateX(-50%);
   font-size: 0.75em;
-  color: #f5f2ea;
+  color: #3a2f22;
   font-weight: 600;
   white-space: nowrap;
 }
